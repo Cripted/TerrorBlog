@@ -208,9 +208,6 @@ const discussionsData = {
 
 let currentThreadId = null;
 
-/**
- * Incrementar vistas al cargar un thread
- */
 function incrementViews(threadId) {
     let views = parseInt(localStorage.getItem(`views_${threadId}`)) || Math.floor(Math.random() * 3000) + 500;
     views += 1;
@@ -218,9 +215,6 @@ function incrementViews(threadId) {
     return views;
 }
 
-/**
- * Obtener vistas de un thread
- */
 function getViews(threadId) {
     let views = parseInt(localStorage.getItem(`views_${threadId}`));
     if (!views) {
@@ -230,9 +224,6 @@ function getViews(threadId) {
     return views;
 }
 
-/**
- * Toggle like en un thread
- */
 function toggleLike(threadId) {
     const likeKey = `liked_${threadId}`;
     const countKey = `likes_${threadId}`;
@@ -256,9 +247,6 @@ function toggleLike(threadId) {
     };
 }
 
-/**
- * Obtener estado de like
- */
 function getLikeStatus(threadId) {
     const likeKey = `liked_${threadId}`;
     const countKey = `likes_${threadId}`;
@@ -275,18 +263,12 @@ function getLikeStatus(threadId) {
     };
 }
 
-/**
- * Obtener comentarios de un thread
- */
 function getComments(threadId) {
     const commentsKey = `comments_${threadId}`;
     const comments = localStorage.getItem(commentsKey);
     return comments ? JSON.parse(comments) : [];
 }
 
-/**
- * Guardar comentario
- */
 function saveComment(threadId, username, text) {
     const commentsKey = `comments_${threadId}`;
     const comments = getComments(threadId);
@@ -310,9 +292,6 @@ function saveComment(threadId, username, text) {
     return comments;
 }
 
-/**
- * Cargar discusiones del juego seleccionado
- */
 function loadDiscussions() {
     const gameSelect = document.getElementById('game-select');
     const threadsContainer = document.getElementById('threads-container');
@@ -360,9 +339,6 @@ function loadDiscussions() {
     });
 }
 
-/**
- * Manejar click en el botón de like
- */
 function handleLike(threadId, event) {
     event.stopPropagation();
     const button = event.currentTarget;
@@ -381,47 +357,33 @@ function handleLike(threadId, event) {
     }
 }
 
-/**
- * Abrir modal de comentarios
- */
 function openCommentsModal(threadId, gameId) {
     currentThreadId = threadId;
     
-    // Incrementar vistas
     incrementViews(threadId);
     
-    // Encontrar el thread
     const threads = discussionsData[gameId];
     const thread = threads.find(t => t.id === threadId);
     
     if (!thread) return;
     
-    // Actualizar contenido del modal
     document.getElementById('modal-thread-title').textContent = thread.title;
     document.getElementById('modal-thread-content').innerHTML = `
         <p class="thread-content">${thread.content}</p>
         <p class="meta">Por <span class="thread-author">${thread.author}</span> | ${thread.time}</p>
     `;
     
-    // Cargar comentarios
     loadComments(threadId);
     
-    // Mostrar modal
     document.getElementById('comments-modal').style.display = 'block';
 }
 
-/**
- * Cerrar modal de comentarios
- */
 function closeCommentsModal() {
     document.getElementById('comments-modal').style.display = 'none';
     currentThreadId = null;
-    loadDiscussions(); // Recargar para actualizar contadores
+    loadDiscussions();
 }
 
-/**
- * Cargar comentarios en el modal
- */
 function loadComments(threadId) {
     const comments = getComments(threadId);
     const commentsList = document.getElementById('comments-list');
@@ -445,9 +407,6 @@ function loadComments(threadId) {
     `).join('');
 }
 
-/**
- * Agregar comentario
- */
 function addComment(event) {
     event.preventDefault();
     
@@ -461,16 +420,11 @@ function addComment(event) {
     saveComment(currentThreadId, username, text);
     loadComments(currentThreadId);
     
-    // Limpiar formulario
     document.getElementById('comment-form').reset();
     
-    // Scroll a los comentarios
     document.getElementById('comments-list').scrollIntoView({ behavior: 'smooth' });
 }
 
-/**
- * Enviar nueva discusión
- */
 function submitDiscussion(event) {
     event.preventDefault();
     
@@ -482,10 +436,8 @@ function submitDiscussion(event) {
     
     alert(`¡Gracias por tu contribución, ${username}!\n\nTu tema "${title}" ha sido publicado en las discusiones de ${selectedGameText}.\n\nLa comunidad de Terror Digital agradece tu participación.`);
     
-    // Limpiar formulario
     event.target.reset();
     
-    // Crear nuevo thread temporal
     const gameId = gameSelect.value;
     const newThreadId = `${gameId}-new-${Date.now()}`;
     
@@ -498,18 +450,14 @@ function submitDiscussion(event) {
         time: 'hace unos segundos'
     };
     
-    // Agregar al principio de la lista actual
     discussionsData[gameId].unshift(newThread);
     
-    // Recargar discusiones
     loadDiscussions();
     
-    // Scroll al nuevo thread
     const threadsContainer = document.getElementById('threads-container');
     threadsContainer.firstElementChild.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-// Cerrar modal al hacer click fuera
 window.onclick = function(event) {
     const modal = document.getElementById('comments-modal');
     if (event.target === modal) {
@@ -517,7 +465,6 @@ window.onclick = function(event) {
     }
 }
 
-// Inicializar al cargar la página
 document.addEventListener('DOMContentLoaded', function() {
     loadDiscussions();
 });

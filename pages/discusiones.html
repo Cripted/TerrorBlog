@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discusiones - TERROR DIGITAL</title>
+    <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Nosifer&family=Crimson+Text:wght@400;600;700&family=Rubik:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+    <div class="grain"></div>
+    
+    <div class="container">
+        <header>
+            <h1 class="logo glitch"><a href="../index.html">TERROR DIGITAL</a></h1>
+            <p class="tagline">El Horror Nunca Duerme</p>
+            <nav>
+                <a href="noticias.html">Noticias</a>
+                <a href="reviews.html">Reviews</a>
+                <a href="guias.html">Guías</a>
+                <a href="discusiones.html">Discusiones</a>
+                <a href="comunidad.html">Comunidad</a>
+            </nav>
+        </header>
+
+        <div class="page-header">
+            <h1 class="section-title">Foro de Discusión</h1>
+            <p class="page-description">Comparte teorías, experiencias y debatequé con la comunidad</p>
+        </div>
+
+        <section class="discussions-section">
+            <div class="discussion-container">
+                <div class="game-selector">
+                    <label for="game-select">Selecciona un juego:</label>
+                    <select id="game-select" onchange="loadDiscussions()">
+                        <option value="silent-hill-2">Silent Hill 2 Remake</option>
+                        <option value="resident-evil-village">Resident Evil Village</option>
+                        <option value="phasmophobia">Phasmophobia</option>
+                        <option value="alan-wake-3">Alan Wake 3</option>
+                        <option value="dead-space">Dead Space Remake</option>
+                        <option value="outlast-trials">Outlast Trials</option>
+                    </select>
+                </div>
+
+                <div class="discussion-threads" id="threads-container">
+                    <!-- Los threads se cargarán dinámicamente con JavaScript -->
+                </div>
+
+                <div class="comment-form">
+                    <h4>Iniciar Nueva Discusión</h4>
+                    <form onsubmit="submitDiscussion(event)">
+                        <div class="form-group">
+                            <label for="thread-title">Título del tema:</label>
+                            <input type="text" id="thread-title" required placeholder="¿De qué quieres hablar?">
+                        </div>
+                        <div class="form-group">
+                            <label for="username">Tu nombre:</label>
+                            <input type="text" id="username" required placeholder="Nombre de usuario">
+                        </div>
+                        <div class="form-group">
+                            <label for="comment">Tu mensaje:</label>
+                            <textarea id="comment" required placeholder="Comparte tus pensamientos..."></textarea>
+                        </div>
+                        <button type="submit" class="submit-btn">Publicar Discusión</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            <p>&copy; 2026 Terror Digital - Blog de Videojuegos de Horror</p>
+            <p>El miedo es solo el principio...</p>
+        </footer>
+    </div>
+
+    <!-- Modal para comentarios -->
+    <div id="comments-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeCommentsModal()">&times;</span>
+            <h2 id="modal-thread-title"></h2>
+            <div id="modal-thread-content"></div>
+            
+            <div class="comments-section">
+                <h4>Comentarios (<span id="comment-count">0</span>)</h4>
+                <div id="comments-list"></div>
+                
+                <div class="add-comment">
+                    <h4>Agregar Comentario</h4>
+                    <form id="comment-form" onsubmit="addComment(event)">
+                        <div class="form-group">
+                            <label for="comment-username">Tu nombre:</label>
+                            <input type="text" id="comment-username" required placeholder="Nombre de usuario">
+                        </div>
+                        <div class="form-group">
+                            <label for="comment-text">Tu comentario:</label>
+                            <textarea id="comment-text" required placeholder="¿Qué opinas?"></textarea>
+                        </div>
+                        <button type="submit" class="submit-btn">Publicar Comentario</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/script.js"></script>
+    <script src="../js/discusiones.js"></script>
+</body>
+</html>

@@ -228,7 +228,7 @@ function shareArticle(platform) {
             break;
     }
 }
-s
+
 // Funciones de vistas (copiadas de script.js para independencia)
 function incrementViews(articleId) {
     let views = parseInt(localStorage.getItem(`views_${articleId}`)) || Math.floor(Math.random() * 5000) + 1000;
