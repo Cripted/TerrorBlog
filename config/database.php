@@ -10,7 +10,6 @@ define('DB_HOST', 'localhost');
 define('DB_NAME', 'terror_digital');
 define('DB_USER', 'root');
 define('DB_PASS', ''); // En XAMPP por defecto está vacío
-define('DB_CHARSET', 'utf8mb4');
 
 // Configuración del sitio
 define('SITE_URL', 'http://localhost/TerrorBlog');

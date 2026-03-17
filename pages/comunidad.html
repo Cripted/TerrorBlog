@@ -177,5 +177,41 @@
     </div>
 
     <script src="../js/script.js"></script>
+    <script>
+async function loadCommunityStats() {
+    try {
+        // Cargar estadísticas
+        const statsResponse = await fetch('../php/api_general.php?action=estadisticas');
+        const stats = await statsResponse.json();
+        
+        document.querySelectorAll('.stat-number')[0].textContent = stats.miembros_activos.toLocaleString();
+        document.querySelectorAll('.stat-number')[1].textContent = stats.articulos_publicados.toLocaleString();
+        document.querySelectorAll('.stat-number')[2].textContent = stats.discusiones_activas.toLocaleString();
+        document.querySelectorAll('.stat-number')[3].textContent = stats.comentarios_totales.toLocaleString();
+        
+        // Cargar top contribuidores
+        const contribResponse = await fetch('../php/api_general.php?action=top_contribuidores');
+        const contribuidores = await contribResponse.json();
+        
+        const contributorsList = document.querySelector('.contributors-list');
+        const ranks = ['🏆', '🥈', '🥉', '4', '5'];
+        
+        contributorsList.innerHTML = contribuidores.map((c, i) => `
+            <div class="contributor">
+                <div class="contributor-rank">${ranks[i]}</div>
+                <div class="contributor-info">
+                    <strong>${c.nombre}</strong>
+                    <p>${c.total_discusiones} publicaciones | ${c.total_likes} likes totales</p>
+                </div>
+            </div>
+        `).join('');
+        
+    } catch (error) {
+        console.error('Error al cargar estadísticas:', error);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadCommunityStats);
+</script>
 </body>
 </html>
