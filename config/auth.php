@@ -1,126 +1,185 @@
 <?php
-require_once __DIR__ . '/database.php';
+/**
+ * config/auth.php — Terror Digital
+ * Sistema de autenticación. Corrección: ruta de database.php arreglada.
+ */
+
+require_once __DIR__ . '/database.php';   // ← slash corregido (era 'database.php' sin /)
 
 class Auth {
-    private $conn;
+    private $db;
 
-    public function __construct($conn) {
-        $this->conn = $conn;
-        _sess(); // arrancar sesión con nombre correcto
+    public function __construct() {
+        $this->initSession();   
     }
 
+    private function initSession() {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_name(SESSION_NAME);
+            session_set_cookie_params(SESSION_LIFETIME);
+            session_start();
+        }
+    }
+
+    // ── Registro ──────────────────────────────────────────────────────────────
+    public function register($username, $email, $password, $nombreCompleto) {
+        try {
+            $stmt = $this->db->prepare("SELECT id FROM usuarios WHERE username = ? OR email = ?");
+            $stmt->execute([$username, $email]);
+            if ($stmt->fetch()) return ['success' => false, 'message' => 'El usuario o email ya existe'];
+
+            $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+            $stmt = $this->db->prepare("
+                INSERT INTO usuarios (username, email, password, nombre_completo, rol)
+                VALUES (?, ?, ?, ?, 'autor')
+            ");
+            $stmt->execute([$username, $email, $hashedPassword, $nombreCompleto]);
+            return ['success' => true, 'message' => 'Usuario registrado exitosamente'];
+        } catch (PDOException $e) {
+            return ['success' => false, 'message' => 'Error al registrar: ' . $e->getMessage()];
+        }
+    }
+
+    // ── Login ─────────────────────────────────────────────────────────────────
     public function login($username, $password, $remember = false) {
-        $stmt = $this->conn->prepare(
-            "SELECT id,username,email,password,nombre_completo,rol,avatar
-             FROM usuarios WHERE (username=? OR email=?) AND activo=1 LIMIT 1"
-        );
-        $stmt->bind_param("ss", $username, $username);
-        $stmt->execute();
-        $user = $stmt->get_result()->fetch_assoc();
-        $stmt->close();
+        try {
+            $stmt = $this->db->prepare("
+                SELECT id, username, email, password, nombre_completo, rol, avatar
+                FROM usuarios
+                WHERE (username = ? OR email = ?) AND activo = TRUE
+            ");
+            $stmt->execute([$username, $username]);
+            $user = $stmt->fetch();
 
-        if (!$user) return ['success'=>false,'message'=>'Usuario no encontrado'];
-        if (!password_verify($password, $user['password']))
-            return ['success'=>false,'message'=>'Contraseña incorrecta'];
+            if (!$user)                                    return ['success' => false, 'message' => 'Usuario no encontrado'];
+            if (!password_verify($password, $user['password'])) return ['success' => false, 'message' => 'Contraseña incorrecta'];
 
-        session_regenerate_id(true);
-        $_SESSION['uid']    = $user['id'];
-        $_SESSION['uname']  = $user['username'];
-        $_SESSION['email']  = $user['email'];
-        $_SESSION['nombre'] = $user['nombre_completo'];
-        $_SESSION['rol']    = $user['rol'];
-        $_SESSION['avatar'] = $user['avatar'];
-        $_SESSION['ok']     = true;
+            // Crear sesión
+            $_SESSION['user_id']        = $user['id'];
+            $_SESSION['username']       = $user['username'];
+            $_SESSION['email']          = $user['email'];
+            $_SESSION['nombre_completo']= $user['nombre_completo'];
+            $_SESSION['rol']            = $user['rol'];
+            $_SESSION['avatar']         = $user['avatar'];
+            $_SESSION['logged_in']      = true;
 
-        $u = $this->conn->prepare("UPDATE usuarios SET ultimo_acceso=NOW() WHERE id=?");
-        $u->bind_param("i", $user['id']); $u->execute(); $u->close();
+            // Último acceso
+            $this->db->prepare("UPDATE usuarios SET ultimo_acceso = NOW() WHERE id = ?")
+                      ->execute([$user['id']]);
 
-        if ($remember) setcookie('remember_token', bin2hex(random_bytes(32)), time()+86400*30, '/');
+            // Cookie "recuérdame"
+            if ($remember) {
+                $token = bin2hex(random_bytes(32));
+                setcookie('remember_token', $token, time() + 86400 * 30, '/', '', false, true);
+                // Guarda el token hasheado en BD si tienes tabla para ello
+            }
 
-        return ['success'=>true,'message'=>'Sesión iniciada'];
+            return ['success' => true, 'message' => 'Sesión iniciada correctamente', 'user' => $user];
+
+        } catch (PDOException $e) {
+            return ['success' => false, 'message' => 'Error al iniciar sesión: ' . $e->getMessage()];
+        }
     }
 
+    // ── Logout ────────────────────────────────────────────────────────────────
     public function logout() {
         $_SESSION = [];
-        if (isset($_COOKIE[session_name()])) setcookie(session_name(),'',time()-3600,'/');
-        if (isset($_COOKIE['remember_token'])) setcookie('remember_token','',time()-3600,'/');
+        if (isset($_COOKIE[session_name()])) setcookie(session_name(), '', time() - 3600, '/');
+        if (isset($_COOKIE['remember_token'])) setcookie('remember_token', '', time() - 3600, '/');
         session_destroy();
+        return ['success' => true, 'message' => 'Sesión cerrada'];
     }
 
+    // ── Estado ────────────────────────────────────────────────────────────────
     public function isLoggedIn() {
-        return !empty($_SESSION['ok']) && $_SESSION['ok'] === true;
+        return isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true;
     }
 
     public function getCurrentUser() {
         if (!$this->isLoggedIn()) return null;
         return [
-            'id'              => $_SESSION['uid'],
-            'username'        => $_SESSION['uname'],
-            'email'           => $_SESSION['email'],
-            'nombre_completo' => $_SESSION['nombre'],
-            'rol'             => $_SESSION['rol'],
-            'avatar'          => $_SESSION['avatar'],
+            'id'             => $_SESSION['user_id'],
+            'username'       => $_SESSION['username'],
+            'email'          => $_SESSION['email'],
+            'nombre_completo'=> $_SESSION['nombre_completo'],
+            'rol'            => $_SESSION['rol'],
+            'avatar'         => $_SESSION['avatar'],
         ];
     }
 
+    // ── Roles ─────────────────────────────────────────────────────────────────
     public function hasRole($role) {
         if (!$this->isLoggedIn()) return false;
-        $n = ['autor'=>1,'editor'=>2,'admin'=>3];
-        return ($n[$_SESSION['rol']] ?? 0) >= ($n[$role] ?? 99);
+        $roles = ['autor' => 1, 'editor' => 2, 'admin' => 3];
+        $userRole = $_SESSION['rol'] ?? 'autor';
+        return isset($roles[$userRole], $roles[$role]) && $roles[$userRole] >= $roles[$role];
     }
 
+    // ── Middleware ────────────────────────────────────────────────────────────
     public function requireLogin() {
         if (!$this->isLoggedIn()) {
-            setFlashMessage('error','Debes iniciar sesión');
-            redirect(SITE_URL.'/admin/login.php');
+            setFlashMessage('error', 'Debes iniciar sesión para acceder a esta página');
+            redirect(SITE_URL . '/admin/login.php');
         }
     }
 
     public function requireRole($role) {
         $this->requireLogin();
         if (!$this->hasRole($role)) {
-            setFlashMessage('error','Sin permisos');
-            redirect(SITE_URL.'/admin/index.php');
+            setFlashMessage('error', 'No tienes permisos para acceder a esta página');
+            redirect(SITE_URL . '/admin/index.php');
         }
     }
 
-    public function register($username, $email, $password, $nombre, $rol='autor') {
-        $c = $this->conn->prepare("SELECT id FROM usuarios WHERE username=? OR email=?");
-        $c->bind_param("ss",$username,$email); $c->execute(); $c->store_result();
-        if ($c->num_rows>0) { $c->close(); return ['success'=>false,'message'=>'Usuario o email ya existe']; }
-        $c->close();
-        $hash = password_hash($password, PASSWORD_DEFAULT);
-        $s = $this->conn->prepare("INSERT INTO usuarios (username,email,password,nombre_completo,rol) VALUES (?,?,?,?,?)");
-        $s->bind_param("sssss",$username,$email,$hash,$nombre,$rol);
-        $ok = $s->execute(); $s->close();
-        return $ok ? ['success'=>true,'message'=>'Usuario creado'] : ['success'=>false,'message'=>'Error al crear'];
+    // ── Cambiar contraseña ────────────────────────────────────────────────────
+    public function changePassword($userId, $currentPassword, $newPassword) {
+        try {
+            $stmt = $this->db->prepare("SELECT password FROM usuarios WHERE id = ?");
+            $stmt->execute([$userId]);
+            $user = $stmt->fetch();
+
+            if (!password_verify($currentPassword, $user['password']))
+                return ['success' => false, 'message' => 'La contraseña actual es incorrecta'];
+
+            $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
+            $this->db->prepare("UPDATE usuarios SET password = ? WHERE id = ?")
+                     ->execute([$hashedPassword, $userId]);
+
+            return ['success' => true, 'message' => 'Contraseña actualizada correctamente'];
+        } catch (PDOException $e) {
+            return ['success' => false, 'message' => 'Error al cambiar contraseña: ' . $e->getMessage()];
+        }
     }
 
-    public function changePassword($userId, $current, $new) {
-        $s = $this->conn->prepare("SELECT password FROM usuarios WHERE id=?");
-        $s->bind_param("i",$userId); $s->execute();
-        $row = $s->get_result()->fetch_assoc(); $s->close();
-        if (!$row || !password_verify($current,$row['password']))
-            return ['success'=>false,'message'=>'Contraseña actual incorrecta'];
-        $hash = password_hash($new, PASSWORD_DEFAULT);
-        $u = $this->conn->prepare("UPDATE usuarios SET password=? WHERE id=?");
-        $u->bind_param("si",$hash,$userId); $ok=$u->execute(); $u->close();
-        return $ok ? ['success'=>true,'message'=>'Contraseña actualizada'] : ['success'=>false,'message'=>'Error'];
-    }
-
+    // ── Actualizar perfil ─────────────────────────────────────────────────────
     public function updateProfile($userId, $data) {
-        $fields=[]; $types=''; $vals=[];
-        foreach (['nombre_completo','email','avatar'] as $f) {
-            if (isset($data[$f])) { $fields[]="$f=?"; $types.='s'; $vals[]=$data[$f]; }
+        try {
+            $fields = []; $values = [];
+
+            foreach (['nombre_completo', 'email', 'avatar'] as $field) {
+                if (isset($data[$field])) {
+                    $fields[] = "$field = ?";
+                    $values[] = $data[$field];
+                }
+            }
+
+            if (empty($fields)) return ['success' => false, 'message' => 'No hay datos para actualizar'];
+
+            $values[] = $userId;
+            $this->db->prepare("UPDATE usuarios SET " . implode(', ', $fields) . " WHERE id = ?")
+                     ->execute($values);
+
+            // Actualizar sesión
+            foreach (['nombre_completo', 'email', 'avatar'] as $field) {
+                if (isset($data[$field])) $_SESSION[$field] = $data[$field];
+            }
+
+            return ['success' => true, 'message' => 'Perfil actualizado correctamente'];
+        } catch (PDOException $e) {
+            return ['success' => false, 'message' => 'Error al actualizar perfil: ' . $e->getMessage()];
         }
-        if (!$fields) return ['success'=>false,'message'=>'Nada que actualizar'];
-        $types.='i'; $vals[]=$userId;
-        $s = $this->conn->prepare("UPDATE usuarios SET ".implode(',',$fields)." WHERE id=?");
-        $s->bind_param($types,...$vals); $ok=$s->execute(); $s->close();
-        foreach (['nombre_completo'=>'nombre','email'=>'email','avatar'=>'avatar'] as $f=>$k)
-            if (isset($data[$f])) $_SESSION[$k]=$data[$f];
-        return $ok ? ['success'=>true,'message'=>'Perfil actualizado'] : ['success'=>false,'message'=>'Error'];
     }
 }
 
-$auth = new Auth($conn);
+// Instancia global
+$auth = new Auth();

@@ -1,59 +1,65 @@
 /**
  * articles_db.js — Terror Digital
- * Carga artículos desde la API PHP y los inyecta en los HTMLs
+ * Consume las APIs PHP y maneja imágenes correctamente.
+ * Detecta automáticamente si está en /pages/ o en la raíz.
  */
 
-// ── Detectar ruta base a la API ───────────────────────────
-function getApiBase() {
-    const path = window.location.pathname;
-    // Si estamos dentro de /pages/ la API está un nivel arriba
-    if (path.includes('/pages/')) return '../php/';
-    return 'php/';
-}
-const API_BASE = getApiBase();
+// ── Rutas relativas según la ubicación del HTML ──────────────────────────────
+const IS_IN_PAGES = window.location.pathname.includes('/pages/');
+const API_BASE    = IS_IN_PAGES ? '../php/' : 'php/';
+const UPLOAD_BASE = IS_IN_PAGES ? '../uploads/' : 'uploads/';
+const PAGES_BASE  = IS_IN_PAGES ? ''          : 'pages/';
 
-// ── Detectar si es la home ────────────────────────────────
-function esHome() {
-    const path = window.location.pathname;
-    return path.endsWith('index.html') || path.endsWith('/TerrorBlog/') || path === '/';
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getArticleId() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('id');
 }
 
-// ── Detectar si es página de artículo ────────────────────
-function esArticulo() {
-    return window.location.pathname.includes('articulo.html');
-}
-
-// ── Leer ?id= de la URL ───────────────────────────────────
-function getSlugFromURL() {
-    return new URLSearchParams(window.location.search).get('id');
-}
-
-// ── Formatear fecha ───────────────────────────────────────
 function formatearFecha(fecha) {
-    if (!fecha) return '—';
     const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                    'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     const d = new Date(fecha);
-    if (isNaN(d)) return fecha;
     return `${d.getDate()} de ${meses[d.getMonth()]}, ${d.getFullYear()}`;
 }
 
-// ── Poner texto en un elemento por id (seguro) ───────────
-function setText(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = value;
+/**
+ * Devuelve el HTML de thumbnail para una tarjeta.
+ * Si hay imagen real usa <img>, si no usa emoji placeholder.
+ */
+function thumbnailHTML(art) {
+    if (art.imagen_destacada) {
+        return `<img class="thumb-real"
+                     src="${UPLOAD_BASE}${art.imagen_destacada}"
+                     alt="${art.titulo}"
+                     onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+                <span class="thumb-emoji" style="display:none">${art.categoria_icono || '📰'}</span>`;
+    }
+    return `<span class="thumb-emoji">${art.categoria_icono || '📰'}</span>`;
 }
 
-// ─────────────────────────────────────────────────────────
-// PÁGINA DE ARTÍCULO INDIVIDUAL
-// ─────────────────────────────────────────────────────────
-async function loadArticle() {
-    const slug = getSlugFromURL();
+function articleCardHTML(art) {
+    return `
+    <article class="article-card">
+        <div class="article-thumbnail">${thumbnailHTML(art)}</div>
+        <div class="article-body">
+            <span class="category-tag">${art.categoria || 'Artículo'}</span>
+            <h3>${art.titulo}</h3>
+            <p class="meta">${formatearFecha(art.fecha_publicacion)}</p>
+            <p class="excerpt">${art.extracto || ''}</p>
+            <a href="${PAGES_BASE}articulo.html?id=${art.slug}" class="read-more">Leer más →</a>
+        </div>
+    </article>`;
+}
 
+// ── Cargar artículo individual ────────────────────────────────────────────────
+
+async function loadArticle() {
+    const slug = getArticleId();
     if (!slug) {
-        setText('article-heading', 'Artículo no encontrado');
-        const body = document.getElementById('article-body');
-        if (body) body.innerHTML = '<p>No se especificó ningún artículo.</p>';
+        document.getElementById('article-heading').textContent = 'Artículo no encontrado';
+        document.getElementById('article-body').innerHTML = '<p>Lo sentimos, el artículo que buscas no existe.</p>';
         return;
     }
 
@@ -62,196 +68,160 @@ async function loadArticle() {
         const art = await res.json();
 
         if (art.error) {
-            setText('article-heading', 'Artículo no encontrado');
-            const body = document.getElementById('article-body');
-            if (body) body.innerHTML = `<p>${art.error}</p>`;
+            document.getElementById('article-heading').textContent = 'Artículo no encontrado';
+            document.getElementById('article-body').innerHTML = `<p>${art.error}</p>`;
             return;
         }
 
-        // Título de la pestaña
         document.title = `${art.titulo} — TERROR DIGITAL`;
 
-        // Metadatos del artículo
-        setText('article-title',    art.titulo);
-        setText('article-category', art.categoria || 'Artículo');
-        setText('article-heading',  art.titulo);
-        setText('article-author',   `Por ${art.autor || 'Redacción'}`);
-        setText('article-date',     formatearFecha(art.fecha_publicacion));
-        setText('views-count',      Number(art.vistas || 0).toLocaleString());
+        const elTitle    = document.getElementById('article-title');
+        const elCategory = document.getElementById('article-category');
+        const elHeading  = document.getElementById('article-heading');
+        const elAuthor   = document.getElementById('article-author');
+        const elDate     = document.getElementById('article-date');
+        const elViews    = document.getElementById('views-count');
+        const elImage    = document.getElementById('article-image');
+        const elBody     = document.getElementById('article-body');
+        const elTags     = document.getElementById('article-tags');
+
+        if (elTitle)    elTitle.textContent    = art.titulo;
+        if (elCategory) elCategory.textContent = art.categoria || 'Artículo';
+        if (elHeading)  elHeading.textContent  = art.titulo;
+        if (elAuthor)   elAuthor.textContent   = `Por ${art.autor}`;
+        if (elDate)     elDate.textContent     = formatearFecha(art.fecha_publicacion);
+        if (elViews)    elViews.textContent    = (art.vistas || 0).toLocaleString();
 
         // Imagen destacada
-        const imgEl = document.getElementById('article-image');
-        if (imgEl) {
-            imgEl.innerHTML = art.imagen_destacada
-                ? `<img src="../uploads/${art.imagen_destacada}" alt="${art.titulo}"
-                        style="width:100%;height:100%;object-fit:cover;">`
-                : `<div class="image-placeholder">${art.categoria_icono || '📰'}</div>`;
+        if (elImage) {
+            if (art.imagen_destacada) {
+                elImage.innerHTML = `
+                    <img src="${UPLOAD_BASE}${art.imagen_destacada}"
+                         alt="${art.titulo}"
+                         onerror="this.outerHTML='<div class=\\'image-placeholder\\'>${art.categoria_icono || '📰'}</div>'">`;
+            } else {
+                elImage.innerHTML = `<div class="image-placeholder">${art.categoria_icono || '📰'}</div>`;
+            }
         }
 
-        // Contenido HTML
-        const bodyEl = document.getElementById('article-body');
-        if (bodyEl) bodyEl.innerHTML = art.contenido || '';
+        if (elBody) elBody.innerHTML = art.contenido || '';
 
         // Tags
-        const tagsEl = document.getElementById('article-tags');
-        if (tagsEl && Array.isArray(art.tags) && art.tags.length) {
-            tagsEl.innerHTML = art.tags.map(t => `<span class="tag">${t}</span>`).join('');
+        if (elTags) {
+            const tags = art.tags ? (typeof art.tags === 'string' ? art.tags.split(',') : art.tags) : [];
+            elTags.innerHTML = tags.map(t => `<span class="tag">${t.trim()}</span>`).join('');
         }
 
-        // Calificación (si hay un .rating-score en el contenido)
-        if (art.calificacion) {
-            const ratingEl = document.querySelector('.rating-box .rating-score');
-            if (ratingEl) ratingEl.textContent = art.calificacion;
-        }
-
-        // Artículos relacionados
-        if (art.id) loadRelacionados(art.id);
+        loadRelatedArticles(art.id);
 
     } catch (err) {
-        console.error('Error cargando artículo:', err);
-        const bodyEl = document.getElementById('article-body');
-        if (bodyEl) bodyEl.innerHTML = '<p>Error al cargar el artículo. Intenta más tarde.</p>';
+        console.error('Error al cargar artículo:', err);
+        const el = document.getElementById('article-body');
+        if (el) el.innerHTML = '<p>Error al cargar el artículo. Por favor intenta más tarde.</p>';
     }
 }
 
-// ── Artículos relacionados ────────────────────────────────
-async function loadRelacionados(articuloId) {
+// ── Artículos relacionados ────────────────────────────────────────────────────
+
+async function loadRelatedArticles(articleId) {
     try {
-        const res  = await fetch(`${API_BASE}api_articulos.php?action=relacionados&articulo_id=${articuloId}`);
+        const res  = await fetch(`${API_BASE}api_articulos.php?action=relacionados&articulo_id=${articleId}`);
         const arts = await res.json();
+        if (!arts || !arts.length) return;
 
-        if (!arts || arts.error || arts.length === 0) return;
-
-        // El HTML usa id="related-grid" o la clase .related-articles .articles-grid
-        const container = document.getElementById('related-grid')
-                       || document.querySelector('.related-articles .articles-grid');
-        if (!container) return;
-
-        container.innerHTML = arts.map(a => `
-            <article class="article-card">
-                <div class="article-thumbnail">${a.categoria_icono || '📰'}</div>
-                <div class="article-body">
-                    <span class="category-tag">${a.categoria || ''}</span>
-                    <h3>${a.titulo}</h3>
-                    <p class="meta">${formatearFecha(a.fecha_publicacion)}</p>
-                    <p class="excerpt">${a.extracto || ''}</p>
-                    <a href="articulo.html?id=${a.slug}" class="read-more">Leer más →</a>
-                </div>
-            </article>
-        `).join('');
-    } catch (e) {
-        console.error('Error cargando relacionados:', e);
+        const container = document.querySelector('.related-articles .articles-grid');
+        if (container) container.innerHTML = arts.map(articleCardHTML).join('');
+    } catch (err) {
+        console.error('Error artículos relacionados:', err);
     }
 }
 
-// ─────────────────────────────────────────────────────────
-// LISTADOS (noticias, reviews, guías)
-// ─────────────────────────────────────────────────────────
-async function loadArticlesList(categoria = null, limit = 9, containerId = 'articles-container') {
-    const container = document.getElementById(containerId)
-                   || document.querySelector('.articles-grid');
-    if (!container) return;
+// ── Compartir ─────────────────────────────────────────────────────────────────
 
-    // Mostrar spinner mientras carga
-    container.innerHTML = '<p style="text-align:center;color:#666;grid-column:1/-1;padding:3rem;">Cargando artículos...</p>';
+function shareArticle(platform) {
+    const url   = window.location.href;
+    const title = (document.getElementById('article-heading') || {}).textContent || 'Terror Digital';
+    const enc   = encodeURIComponent;
+
+    const urls = {
+        twitter:  `https://twitter.com/intent/tweet?text=${enc(title)}&url=${enc(url)}`,
+        facebook: `https://www.facebook.com/sharer/sharer.php?u=${enc(url)}`,
+        reddit:   `https://reddit.com/submit?url=${enc(url)}&title=${enc(title)}`,
+    };
+
+    if (platform === 'copy') {
+        navigator.clipboard.writeText(url).then(() => alert('¡Link copiado al portapapeles!'));
+        return;
+    }
+    if (urls[platform]) window.open(urls[platform], '_blank');
+}
+
+// ── Listado de artículos ──────────────────────────────────────────────────────
+
+async function loadArticlesList(categoria = null, limit = 9, containerId = 'articles-container') {
+    let url = `${API_BASE}api_articulos.php?action=list&limit=${limit}`;
+    if (categoria) url += `&categoria=${encodeURIComponent(categoria)}`;
 
     try {
-        let url = `${API_BASE}api_articulos.php?action=list&limit=${limit}`;
-        if (categoria) url += `&categoria=${encodeURIComponent(categoria)}`;
-
         const res  = await fetch(url);
         const arts = await res.json();
+        if (!Array.isArray(arts) || !arts.length) return;   // mantiene el HTML estático
 
-        // Si la API no devuelve datos, dejar el contenido estático del HTML
-        if (!arts || arts.error || arts.length === 0) {
-            container.innerHTML = '';   // limpiar spinner, el HTML estático ya no existe
-            return;
-        }
-
-        // Si estamos en /pages/ el enlace es directo, si es raíz necesita pages/
-        const prefix = window.location.pathname.includes('/pages/') ? '' : 'pages/';
-
-        container.innerHTML = arts.map(a => `
-            <article class="article-card">
-                <div class="article-thumbnail">${a.categoria_icono || '📰'}</div>
-                <div class="article-body">
-                    <span class="category-tag">${a.categoria || ''}</span>
-                    <h3>${a.titulo}</h3>
-                    <p class="meta">${formatearFecha(a.fecha_publicacion)}</p>
-                    <p class="excerpt">${a.extracto || ''}</p>
-                    <a href="${prefix}articulo.html?id=${a.slug}" class="read-more">Leer más →</a>
-                </div>
-            </article>
-        `).join('');
-
-    } catch (e) {
-        console.error('Error cargando lista:', e);
-        // Si falla la API dejamos el contenido HTML estático intacto (no borramos)
-        container.innerHTML = '';
+        const container = document.getElementById(containerId)
+                       || document.querySelector('.articles-grid');
+        if (container) container.innerHTML = arts.map(articleCardHTML).join('');
+    } catch (err) {
+        console.error('Error al cargar listado:', err);
+        // En caso de error se mantiene el HTML estático que ya está en la página
     }
 }
 
-// ─────────────────────────────────────────────────────────
-// HOME — artículo destacado + listado reciente
-// ─────────────────────────────────────────────────────────
+// ── Artículo destacado ────────────────────────────────────────────────────────
+
 async function loadFeaturedArticle() {
     try {
         const res  = await fetch(`${API_BASE}api_articulos.php?action=destacados&limit=1`);
         const arts = await res.json();
+        if (!arts || !arts.length) return;
 
-        if (!arts || arts.error || arts.length === 0) return;
+        const art     = arts[0];
+        const content = document.getElementById('featured-content');
+        const imgBox  = document.querySelector('#featured-main .featured-image');
 
-        const art = arts[0];
-        const el  = document.querySelector('.featured-article .featured-content');
-        if (!el) return;
+        if (content) {
+            content.innerHTML = `
+                <span class="category-tag">Destacado</span>
+                <h2>${art.titulo}</h2>
+                <p class="meta">Por ${art.autor} | ${formatearFecha(art.fecha_publicacion)} | ${(art.vistas||0).toLocaleString()} vistas</p>
+                <p class="excerpt">${art.extracto || ''}</p>
+                <a href="${PAGES_BASE}articulo.html?id=${art.slug}" class="read-more">Leer análisis completo →</a>
+            `;
+        }
 
-        el.innerHTML = `
-            <span class="category-tag">Destacado</span>
-            <h2>${art.titulo}</h2>
-            <p class="meta">
-                Por ${art.autor || 'Redacción'} |
-                ${formatearFecha(art.fecha_publicacion)} |
-                ${Number(art.vistas || 0).toLocaleString()} vistas
-            </p>
-            <p class="excerpt">${art.extracto || ''}</p>
-            <a href="pages/articulo.html?id=${art.slug}" class="read-more">Leer análisis completo →</a>
-        `;
-    } catch (e) {
-        console.error('Error cargando destacado:', e);
+        if (imgBox && art.imagen_destacada) {
+            imgBox.innerHTML = `
+                <img class="thumb-real"
+                     src="${UPLOAD_BASE}${art.imagen_destacada}"
+                     alt="${art.titulo}"
+                     onerror="this.style.display='none'">`;
+        }
+    } catch (err) {
+        console.error('Error artículo destacado:', err);
     }
 }
 
-// ─────────────────────────────────────────────────────────
-// COMPARTIR
-// ─────────────────────────────────────────────────────────
-function shareArticle(platform) {
-    const url   = window.location.href;
-    const title = document.getElementById('article-heading')?.textContent || 'Terror Digital';
+// ── Auto-inicialización ───────────────────────────────────────────────────────
 
-    const links = {
-        twitter:  `https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`,
-        facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,
-        reddit:   `https://reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`,
-    };
-
-    if (links[platform]) {
-        window.open(links[platform], '_blank');
-    } else if (platform === 'copy') {
-        navigator.clipboard.writeText(url)
-            .then(() => alert('¡Link copiado al portapapeles!'))
-            .catch(() => prompt('Copia este link:', url));
-    }
-}
-
-// ─────────────────────────────────────────────────────────
-// INICIALIZACIÓN AUTOMÁTICA
-// ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    if (esArticulo()) {
+    // Página de artículo individual
+    if (document.getElementById('article-body')) {
         loadArticle();
         return;
     }
-    if (esHome()) {
+
+    // Index (raíz o /index.html)
+    const path = window.location.pathname;
+    if (path.endsWith('/') || path.endsWith('index.html')) {
         loadFeaturedArticle();
         loadArticlesList(null, 6, 'articles-container');
     }

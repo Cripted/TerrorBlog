@@ -1,18 +1,26 @@
+/**
+ * script.js — Terror Digital
+ * Utilidades globales del sitio público.
+ */
+
 document.addEventListener('DOMContentLoaded', function () {
 
-    // Smooth scroll en enlaces internos
+    // Smooth scroll para anclas internas
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         anchor.addEventListener('click', function (e) {
-            e.preventDefault();
-            const target = document.getElementById(this.getAttribute('href').substring(1));
-            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            const targetId = this.getAttribute('href').substring(1);
+            const target   = document.getElementById(targetId);
+            if (target) {
+                e.preventDefault();
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         });
     });
 
-    // Hover en tarjetas (respaldo para navegadores sin CSS :hover en transform)
+    // Hover suave en tarjetas (complementa el CSS, por si el CSS no carga)
     document.querySelectorAll('.article-card, .news-item').forEach(card => {
-        card.addEventListener('mouseenter', function () { this.style.transform = 'translateY(-5px)'; });
-        card.addEventListener('mouseleave', function () { this.style.transform = 'translateY(0)'; });
+        card.addEventListener('mouseenter', () => card.style.transform = 'translateY(-5px)');
+        card.addEventListener('mouseleave', () => card.style.transform = 'translateY(0)');
     });
 });
 
@@ -21,6 +29,45 @@ setInterval(() => {
     const logo = document.querySelector('.logo');
     if (logo && Math.random() > 0.95) {
         logo.style.opacity = '0.5';
-        setTimeout(() => { logo.style.opacity = '1'; }, 100);
+        setTimeout(() => (logo.style.opacity = '1'), 100);
     }
 }, 3000);
+
+// ── Like ──────────────────────────────────────────────────────────────────────
+
+function toggleLike(threadId) {
+    const likeKey  = `liked_${threadId}`;
+    const countKey = `likes_${threadId}`;
+    const hasLiked = localStorage.getItem(likeKey) === 'true';
+    let count      = parseInt(localStorage.getItem(countKey)) || 0;
+
+    if (hasLiked) {
+        count = Math.max(0, count - 1);
+        localStorage.setItem(likeKey, 'false');
+    } else {
+        count++;
+        localStorage.setItem(likeKey, 'true');
+    }
+    localStorage.setItem(countKey, count);
+    return { liked: !hasLiked, count };
+}
+
+function getLikeStatus(threadId) {
+    return {
+        liked: localStorage.getItem(`liked_${threadId}`) === 'true',
+        count: parseInt(localStorage.getItem(`likes_${threadId}`)) || 0
+    };
+}
+
+// ── Vistas ────────────────────────────────────────────────────────────────────
+
+function incrementViews(articleId) {
+    let v = parseInt(localStorage.getItem(`views_${articleId}`)) || 0;
+    v++;
+    localStorage.setItem(`views_${articleId}`, v);
+    return v;
+}
+
+function getViews(articleId) {
+    return parseInt(localStorage.getItem(`views_${articleId}`)) || 0;
+}
