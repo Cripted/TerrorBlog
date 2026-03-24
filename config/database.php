@@ -1,5 +1,5 @@
 <?php
-// ── Conexión MySQLi ───────────────────────────────────────
+// ── Conexión MySQLi (para APIs legacy) ───────────────────────────────────────
 $servername = "localhost";
 $username   = "root";
 $password   = "";
@@ -10,6 +10,28 @@ if ($conn->connect_error) {
     die(json_encode(['error' => 'Conexión fallida: ' . $conn->connect_error]));
 }
 $conn->set_charset("utf8mb4");
+
+// ── Conexión PDO (para Auth y panel admin) ────────────────────────────────────
+function getDB() {
+    static $pdo = null;
+    if ($pdo === null) {
+        try {
+            $pdo = new PDO(
+                'mysql:host=localhost;dbname=terror_digital;charset=utf8mb4',
+                'root',
+                '',
+                [
+                    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    PDO::ATTR_EMULATE_PREPARES   => false,
+                ]
+            );
+        } catch (PDOException $e) {
+            die(json_encode(['error' => 'Conexión PDO fallida: ' . $e->getMessage()]));
+        }
+    }
+    return $pdo;
+}
 
 // ── Constantes ────────────────────────────────────────────
 define('SITE_URL',         'http://localhost/TerrorBlog');
