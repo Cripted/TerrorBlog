@@ -2,6 +2,7 @@
  * articles_db.js — Terror Digital
  * Consume las APIs PHP y maneja imágenes correctamente.
  * Detecta automáticamente si está en /pages/ o en la raíz.
+ * Soporta imágenes locales (uploads/) y URLs externas (Steam, etc.)
  */
 
 // ── Rutas relativas según la ubicación del HTML ──────────────────────────────
@@ -25,13 +26,27 @@ function formatearFecha(fecha) {
 }
 
 /**
+ * Resuelve la URL correcta de una imagen.
+ * Si es una URL externa (Steam, http/https) la devuelve tal cual.
+ * Si es un nombre de archivo local, le añade el prefijo de uploads.
+ */
+function resolveImageUrl(imagen) {
+    if (!imagen) return null;
+    if (imagen.startsWith('http://') || imagen.startsWith('https://')) {
+        return imagen; // URL externa: Steam u otro CDN
+    }
+    return UPLOAD_BASE + imagen; // archivo local
+}
+
+/**
  * Devuelve el HTML de thumbnail para una tarjeta.
  * Si hay imagen real usa <img>, si no usa emoji placeholder.
  */
 function thumbnailHTML(art) {
     if (art.imagen_destacada) {
+        const src = resolveImageUrl(art.imagen_destacada);
         return `<img class="thumb-real"
-                     src="${UPLOAD_BASE}${art.imagen_destacada}"
+                     src="${src}"
                      alt="${art.titulo}"
                      onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
                 <span class="thumb-emoji" style="display:none">${art.categoria_icono || '📰'}</span>`;
@@ -92,11 +107,12 @@ async function loadArticle() {
         if (elDate)     elDate.textContent     = formatearFecha(art.fecha_publicacion);
         if (elViews)    elViews.textContent    = (art.vistas || 0).toLocaleString();
 
-        // Imagen destacada
+        // Imagen destacada — soporta URLs externas y locales
         if (elImage) {
             if (art.imagen_destacada) {
+                const imgSrc = resolveImageUrl(art.imagen_destacada);
                 elImage.innerHTML = `
-                    <img src="${UPLOAD_BASE}${art.imagen_destacada}"
+                    <img src="${imgSrc}"
                          alt="${art.titulo}"
                          onerror="this.outerHTML='<div class=\\'image-placeholder\\'>${art.categoria_icono || '📰'}</div>'">`;
             } else {
@@ -165,14 +181,13 @@ async function loadArticlesList(categoria = null, limit = 9, containerId = 'arti
     try {
         const res  = await fetch(url);
         const arts = await res.json();
-        if (!Array.isArray(arts) || !arts.length) return;   // mantiene el HTML estático
+        if (!Array.isArray(arts) || !arts.length) return;
 
         const container = document.getElementById(containerId)
                        || document.querySelector('.articles-grid');
         if (container) container.innerHTML = arts.map(articleCardHTML).join('');
     } catch (err) {
         console.error('Error al cargar listado:', err);
-        // En caso de error se mantiene el HTML estático que ya está en la página
     }
 }
 
@@ -199,9 +214,10 @@ async function loadFeaturedArticle() {
         }
 
         if (imgBox && art.imagen_destacada) {
+            const imgSrc = resolveImageUrl(art.imagen_destacada);
             imgBox.innerHTML = `
                 <img class="thumb-real"
-                     src="${UPLOAD_BASE}${art.imagen_destacada}"
+                     src="${imgSrc}"
                      alt="${art.titulo}"
                      onerror="this.style.display='none'">`;
         }
@@ -213,13 +229,11 @@ async function loadFeaturedArticle() {
 // ── Auto-inicialización ───────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Página de artículo individual
     if (document.getElementById('article-body')) {
         loadArticle();
         return;
     }
 
-    // Index (raíz o /index.html)
     const path = window.location.pathname;
     if (path.endsWith('/') || path.endsWith('index.html')) {
         loadFeaturedArticle();

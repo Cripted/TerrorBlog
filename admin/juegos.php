@@ -348,35 +348,25 @@ $flash = getFlashMessage();
             </thead>
             <tbody>
             <?php foreach ($juegos as $j): ?>
-            <tr>
-                <td class="juego-portada-cell">
-                    <?php if (!empty($j['imagen_portada'])): ?>
-                    <img src="<?= htmlspecialchars($j['imagen_portada']) ?>" alt="<?= htmlspecialchars($j['nombre']) ?>"
-                         onerror="this.style.display='none'">
-                    <?php else: ?>
-                    <span style="color:#444;font-size:.75rem;">Sin imagen</span>
-                    <?php endif; ?>
-                </td>
-                <td><strong><?= htmlspecialchars($j['nombre']) ?></strong></td>
-                <td><code style="color:#888;font-size:.78rem;"><?= htmlspecialchars($j['slug']) ?></code></td>
-                <td><?= htmlspecialchars($j['desarrollador'] ?? '—') ?></td>
-                <td><?= $j['anio_lanzamiento'] ?? '—' ?></td>
-                <td><?= $j['calificacion'] ? number_format($j['calificacion'], 1) : '—' ?></td>
-                <td><?= $j['total_arts'] ?></td>
-                <td><?= $j['total_disc'] ?></td>
-                <td>
-                    <span class="badge <?= $j['activo'] ? 'badge-green' : 'badge-gray' ?>">
-                        <?= $j['activo'] ? 'Activo' : 'Inactivo' ?>
-                    </span>
-                </td>
-                <td>
-                    <form method="POST" style="display:inline">
-                        <input type="hidden" name="toggle_juego" value="<?= $j['id'] ?>">
-                        <button type="submit" class="btn-xs">
-                            <?= $j['activo'] ? '🚫 Desactivar' : '✅ Activar' ?>
-                        </button>
-                    </form>
-                </td>
+
+<td class="juego-portada-cell">
+    <?php if (!empty($j['imagen_portada'])): ?>
+        <?php
+        // Si ya es una URL completa (Steam, http/https) úsala directamente.
+        // Si es un nombre de archivo local, añade el prefijo uploads/.
+        $isExternal = str_starts_with($j['imagen_portada'], 'http://') 
+                   || str_starts_with($j['imagen_portada'], 'https://');
+        $imgSrc = $isExternal
+            ? htmlspecialchars($j['imagen_portada'])
+            : '../uploads/' . htmlspecialchars($j['imagen_portada']);
+        ?>
+        <img src="<?= $imgSrc ?>"
+             alt="<?= htmlspecialchars($j['nombre']) ?>"
+             onerror="this.style.display='none'">
+    <?php else: ?>
+        <span style="color:#444;font-size:.75rem;">Sin imagen</span>
+    <?php endif; ?>
+</td>
             </tr>
             <?php endforeach; ?>
             <?php if (empty($juegos)): ?>
@@ -396,11 +386,10 @@ function switchImgTab(tab, el) {
     el.classList.add('active');
     document.getElementById('panel-' + tab).classList.add('active');
 
-    // Si cambia a local, limpiar selección Steam
     if (tab === 'local') {
         document.getElementById('steam_image_url').value = '';
+        limpiarSeleccion(false);
     } else {
-        // Si vuelve a Steam, limpiar el input local
         document.getElementById('input-local-img').value = '';
         document.getElementById('local-preview').style.display = 'none';
     }
@@ -424,13 +413,12 @@ function previewLocal(input) {
         const reader = new FileReader();
         reader.onload = e => { prev.src = e.target.result; prev.style.display = 'block'; };
         reader.readAsDataURL(input.files[0]);
-        // Si hay algo de Steam, limpiarlo
         document.getElementById('steam_image_url').value = '';
         limpiarSeleccion(false);
     }
 }
 
-// ── Búsqueda Steam ────────────────────────────────────────────────────────────
+// ── Búsqueda Steam (a través del proxy PHP para evitar CORS) ─────────────────
 let steamAppSeleccionado = null;
 
 async function buscarSteam() {
@@ -444,16 +432,18 @@ async function buscarSteam() {
     btn.disabled = true;
     btn.textContent = 'Buscando...';
     status.className = '';
-    status.textContent = 'Consultando la API de Steam...';
+    status.textContent = 'Consultando Steam...';
     results.style.display = 'none';
     results.innerHTML = '';
 
     try {
-        // Steam Store search API (pública, sin key)
-        const url = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(query)}&l=spanish&cc=MX`;
+        // Usamos el proxy PHP para evitar el bloqueo CORS del navegador
+        const url = `../php/steam_proxy.php?q=${encodeURIComponent(query)}`;
         const res  = await fetch(url);
-        const data = await res.json();
 
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
         const items = data?.items ?? [];
 
         if (!items.length) {
@@ -465,14 +455,14 @@ async function buscarSteam() {
         }
 
         status.className = 'ok';
-        status.textContent = `${items.length} resultado(s) encontrado(s). Haz clic en uno para seleccionarlo.`;
+        status.textContent = `${items.length} resultado(s). Haz clic en uno para seleccionarlo.`;
 
         results.innerHTML = items.slice(0, 15).map(item => {
-            // Steam ofrece varias URLs de imagen, usamos la header capsule (460x215)
             const imgUrl = `https://cdn.akamai.steamstatic.com/steam/apps/${item.id}/header.jpg`;
             return `
             <div class="steam-result-item" onclick="seleccionarJuegoSteam(${item.id}, '${escJS(item.name)}', '${escJS(imgUrl)}')" data-appid="${item.id}">
-                <img src="${imgUrl}" alt="${escHTML(item.name)}" onerror="this.src='https://via.placeholder.com/80x37/1b2838/66c0f4?text=?'">
+                <img src="${imgUrl}" alt="${escHTML(item.name)}"
+                     onerror="this.src='https://placehold.co/80x37/1b2838/66c0f4?text=?'">
                 <div class="steam-result-info">
                     <strong>${escHTML(item.name)}</strong>
                     <small>App ID: ${item.id}</small>
@@ -485,7 +475,7 @@ async function buscarSteam() {
 
     } catch (err) {
         status.className = 'error';
-        status.textContent = 'Error al conectar con Steam. Prueba usar imagen local.';
+        status.textContent = 'Error al conectar con Steam. ¿Existe php/steam_proxy.php?';
         console.error(err);
     }
 
@@ -496,19 +486,23 @@ async function buscarSteam() {
 function seleccionarJuegoSteam(appId, nombre, imgUrl) {
     steamAppSeleccionado = { appId, nombre, imgUrl };
 
-    // Marcar visualmente
+    // Marcar visualmente en la lista
     document.querySelectorAll('.steam-result-item').forEach(el => {
         el.classList.toggle('selected', el.dataset.appid == appId);
     });
 
-    // Guardar en el campo oculto
+    // Guardar la URL en el campo oculto — se enviará al formulario PHP
     document.getElementById('steam_image_url').value = imgUrl;
 
-    // Mostrar preview
-    const preview = document.getElementById('steam-selected-preview');
-    document.getElementById('steam-preview-img').src = imgUrl;
-    document.getElementById('steam-preview-nombre').textContent = nombre;
-    preview.style.display = 'flex';
+    // Mostrar preview — fix: usar flex explícito
+    const preview  = document.getElementById('steam-selected-preview');
+    const previewImg = document.getElementById('steam-preview-img');
+    const previewNom = document.getElementById('steam-preview-nombre');
+
+    previewImg.src         = imgUrl;
+    previewImg.alt         = nombre;
+    previewNom.textContent = nombre;
+    preview.style.display  = 'flex';   // ← fix: era display:none en el CSS inline
 
     // Limpiar input local
     document.getElementById('input-local-img').value = '';
@@ -524,10 +518,13 @@ function limpiarSeleccion(resetField = true) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function escHTML(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function escJS(s) {
-    return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"');
+    return String(s)
+        .replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"');
 }
 </script>
 </body>
