@@ -1,135 +1,115 @@
-<?php
-require_once '../config/auth.php';
-$auth->requireRole('editor');
-$user = $auth->getCurrentUser();
-$db   = getDB();
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['delete_id'])) {
-        $db->prepare("DELETE FROM discusiones WHERE id = ?")->execute([(int)$_POST['delete_id']]);
-        setFlashMessage('success', 'Discusión eliminada');
-    } elseif (isset($_POST['toggle_id'])) {
-        $db->prepare("UPDATE discusiones SET aprobado = NOT aprobado WHERE id = ?")->execute([(int)$_POST['toggle_id']]);
-        setFlashMessage('success', 'Estado actualizado');
-    }
-    redirect(SITE_URL . '/admin/discusiones.php');
-}
-
-$fj = sanitize($_GET['juego'] ?? '');
-if ($fj) {
-    $stmt = $db->prepare("
-        SELECT d.id, d.titulo, d.autor_nombre, d.aprobado, d.likes, d.fecha_creacion,
-               j.nombre AS juego,
-               (SELECT COUNT(*) FROM comentarios_discusion cd WHERE cd.discusion_id = d.id) AS total_comentarios
-        FROM discusiones d
-        JOIN juegos j ON d.juego_id = j.id
-        WHERE j.slug = ?
-        ORDER BY d.fecha_creacion DESC
-    ");
-    $stmt->execute([$fj]);
-} else {
-    $stmt = $db->prepare("
-        SELECT d.id, d.titulo, d.autor_nombre, d.aprobado, d.likes, d.fecha_creacion,
-               j.nombre AS juego,
-               (SELECT COUNT(*) FROM comentarios_discusion cd WHERE cd.discusion_id = d.id) AS total_comentarios
-        FROM discusiones d
-        JOIN juegos j ON d.juego_id = j.id
-        ORDER BY d.fecha_creacion DESC
-    ");
-    $stmt->execute();
-}
-$discs  = $stmt->fetchAll();
-$juegos = $db->query("SELECT * FROM juegos WHERE activo = 1 ORDER BY nombre")->fetchAll();
-$flash  = getFlashMessage();
-?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Discusiones - Admin | Terror Digital</title>
-    <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:wght@400;600;700&family=Rubik:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <title>Discusiones - TERROR DIGITAL</title>
+    <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Nosifer&family=Crimson+Text:wght@400;600;700&family=Rubik:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/styles.css">
-    <link rel="stylesheet" href="../css/admin.css">
 </head>
 <body>
 <div class="grain"></div>
-<div class="admin-layout">
-    <?php include 'partials/sidebar.php'; ?>
-    <main class="admin-main">
-        <div class="admin-header">
-            <h1>💬 Discusiones</h1>
+<div class="container">
+    <header></header>
+
+    <div class="page-header">
+        <h1 class="section-title">Foro de Discusiones</h1>
+        <p class="page-description">Comparte tus teorías, experiencias y opiniones sobre el mundo del terror gaming</p>
+    </div>
+
+    <div class="discussions-section" style="border-top:none;margin-top:0;padding-top:0;">
+        <div class="discussion-container">
+
+            <div class="game-selector">
+                <label for="game-select">🎮 Selecciona un juego:</label>
+                <select id="game-select" onchange="loadDiscussions()">
+                    <option value="">Cargando juegos...</option>
+                </select>
+            </div>
+
+            <div class="discussion-threads" id="threads-container">
+                <p style="text-align:center;color:#999;padding:2rem;">Selecciona un juego para ver las discusiones.</p>
+            </div>
+
+            <div class="comment-form">
+                <h4>💬 Iniciar Nueva Discusión</h4>
+                <form id="discussion-form" onsubmit="submitDiscussion(event)">
+                    <div class="form-group">
+                        <label>Tu nombre:</label>
+                        <input type="text" id="username" placeholder="Tu nombre o alias" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Título del tema:</label>
+                        <input type="text" id="thread-title" placeholder="Ej: ¿Cuál es el mejor final de Silent Hill 2?" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Tu mensaje:</label>
+                        <textarea id="comment" placeholder="Comparte tu opinión, teoría o experiencia..." required></textarea>
+                    </div>
+                    <button type="submit" class="submit-btn">🔥 Publicar discusión</button>
+                </form>
+            </div>
         </div>
+    </div>
 
-        <?php if ($flash): ?>
-        <div class="alert alert-<?= $flash['type'] === 'error' ? 'error' : 'success' ?>">
-            <?= htmlspecialchars($flash['message']) ?>
-        </div>
-        <?php endif; ?>
-
-        <form method="GET" class="filter-bar">
-            <select name="juego" onchange="this.form.submit()">
-                <option value="">Todos los juegos</option>
-                <?php foreach ($juegos as $j): ?>
-                <option value="<?= htmlspecialchars($j['slug']) ?>" <?= $fj === $j['slug'] ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($j['nombre']) ?>
-                </option>
-                <?php endforeach; ?>
-            </select>
-            <a href="discusiones.php" class="btn-xs">Ver todas</a>
-        </form>
-
-        <p style="color:#666;margin-bottom:1rem;font-size:.9rem;"><?= count($discs) ?> discusiones</p>
-
-        <div style="overflow-x:auto;">
-        <table class="admin-table">
-            <thead>
-                <tr>
-                    <th>Título</th>
-                    <th>Autor</th>
-                    <th>Juego</th>
-                    <th>Resp.</th>
-                    <th>Likes</th>
-                    <th>Estado</th>
-                    <th>Fecha</th>
-                    <th>Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-            <?php foreach ($discs as $d): ?>
-            <tr>
-                <td><?= htmlspecialchars($d['titulo']) ?></td>
-                <td><?= htmlspecialchars($d['autor_nombre']) ?></td>
-                <td><?= htmlspecialchars($d['juego']) ?></td>
-                <td>💬 <?= $d['total_comentarios'] ?></td>
-                <td>❤️ <?= $d['likes'] ?></td>
-                <td>
-                    <span class="badge <?= $d['aprobado'] ? 'badge-green' : 'badge-gray' ?>">
-                        <?= $d['aprobado'] ? 'Visible' : 'Oculta' ?>
-                    </span>
-                </td>
-                <td><?= date('d/m/Y', strtotime($d['fecha_creacion'])) ?></td>
-                <td class="actions-cell">
-                    <form method="POST" style="display:inline">
-                        <input type="hidden" name="toggle_id" value="<?= $d['id'] ?>">
-                        <button type="submit" class="btn-xs">
-                            <?= $d['aprobado'] ? '🚫 Ocultar' : '✅ Aprobar' ?>
-                        </button>
+    <!-- Modal de comentarios -->
+    <div id="comments-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeCommentsModal()">&times;</span>
+            <h3 id="modal-thread-title"></h3>
+            <div id="modal-thread-content"></div>
+            <div class="comments-section">
+                <h4>💬 Comentarios (<span id="comment-count">0</span>)</h4>
+                <div id="comments-list"></div>
+                <div class="add-comment">
+                    <h4>Agregar comentario</h4>
+                    <form id="comment-form" onsubmit="addComment(event)">
+                        <div class="form-group">
+                            <label>Tu nombre:</label>
+                            <input type="text" id="comment-username" placeholder="Tu nombre o alias" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Comentario:</label>
+                            <textarea id="comment-text" placeholder="Escribe tu comentario..." required></textarea>
+                        </div>
+                        <button type="submit" class="submit-btn">Publicar comentario</button>
                     </form>
-                    <form method="POST" style="display:inline" onsubmit="return confirm('¿Eliminar esta discusión?')">
-                        <input type="hidden" name="delete_id" value="<?= $d['id'] ?>">
-                        <button type="submit" class="btn-xs btn-danger">🗑️</button>
-                    </form>
-                </td>
-            </tr>
-            <?php endforeach; ?>
-            <?php if (empty($discs)): ?>
-            <tr><td colspan="8" style="text-align:center;color:#666;padding:2rem;">No hay discusiones todavía.</td></tr>
-            <?php endif; ?>
-            </tbody>
-        </table>
+                </div>
+            </div>
         </div>
-    </main>
+    </div>
+
+    <footer>
+        <p>&copy; 2026 Terror Digital - Blog de Videojuegos de Horror</p>
+        <p>El miedo es solo el principio...</p>
+    </footer>
 </div>
+
+<script src="../js/script.js"></script>
+<script src="../js/header.js"></script>
+<script src="../js/discusiones_db.js"></script>
+<script>
+// Cargar juegos en el select al iniciar
+async function cargarJuegos() {
+    try {
+        const res   = await fetch('../php/api_general.php?action=list');
+        const juegos = await res.json();
+        const sel   = document.getElementById('game-select');
+        if (!juegos.length) {
+            sel.innerHTML = '<option value="">No hay juegos disponibles</option>';
+            return;
+        }
+        sel.innerHTML = juegos.map(j =>
+            `<option value="${j.slug}">${j.nombre}</option>`
+        ).join('');
+        // Cargar discusiones del primer juego automáticamente
+        loadDiscussions();
+    } catch(e) {
+        document.getElementById('game-select').innerHTML =
+            '<option value="">Error al cargar juegos</option>';
+    }
+}
+document.addEventListener('DOMContentLoaded', cargarJuegos);
+</script>
 </body>
 </html>
