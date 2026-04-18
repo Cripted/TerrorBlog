@@ -87,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $imagen_destacada = null;
 
         if (!empty($_POST['steam_image_url'])) {
-            $imagen_destacada = sanitize($_POST['steam_image_url']);
+        $imagen_destacada = trim($_POST['steam_image_url']);
         } elseif (!empty($_FILES['imagen']['name'])) {
             $up = uploadImage($_FILES['imagen'], 'art');
             if ($up['success']) {

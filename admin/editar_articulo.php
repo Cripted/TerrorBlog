@@ -1,7 +1,9 @@
 <?php
 require_once '../config/auth.php';
+require_once '../config/auth.php';
 $auth->requireLogin();
 $user = $auth->getCurrentUser();
+$db   = getDB();
 
 $editId   = isset($_GET['id']) ? (int)$_GET['id'] : null;
 $articulo = null;
@@ -47,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $imagen = $articulo['imagen_destacada'] ?? null;
 
     if (!empty($_POST['steam_image_url'])) {
-        $imagen = sanitize($_POST['steam_image_url']);
+    $imagen = trim($_POST['steam_image_url']);
     } elseif (!empty($_FILES['imagen']['name'])) {
         $upload = uploadImage($_FILES['imagen'], 'art');
         if ($upload['success']) $imagen = $upload['filename'];
@@ -58,38 +60,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $juegoIdVal = $juegoId ?: null;
         $calificVal = $calificacion ? (float)$calificacion : null;
 
-        if ($editId) {
-            $stmt = $db->prepare("
-                UPDATE articulos SET
-                    titulo=?, slug=?, extracto=?, contenido=?,
-                    imagen_destacada=?, categoria_id=?, juego_id=?,
-                    calificacion=?, destacado=?, publicado=?,
-                    fecha_publicacion=IF(?=1 AND fecha_publicacion IS NULL,NOW(),fecha_publicacion)
-                WHERE id=?
-            ");
-            $stmt->bind_param("sssssiiidiii",
-                $titulo,$slug,$extracto,$contenido,
-                $imagen,$categoriaId,$juegoIdVal,
-                $calificVal,$destacado,$publicado,
-                $publicado,$editId);
-            $stmt->execute(); $stmt->close();
-            $artId = $editId;
-        } else {
-            $stmt = $db->prepare("
-                INSERT INTO articulos
-                    (titulo,slug,extracto,contenido,imagen_destacada,
-                     autor_id,categoria_id,juego_id,calificacion,
-                     destacado,publicado,fecha_publicacion)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,IF(?=1,NOW(),NULL))
-            ");
-            $stmt->bind_param("sssssiiidiii",
-                $titulo,$slug,$extracto,$contenido,$imagen,
-                $user['id'],$categoriaId,$juegoIdVal,
-                $calificVal,$destacado,$publicado,$publicado);
-            $stmt->execute();
-            $artId = $db->lastInsertId();
-            $stmt->close();
-        }
+if ($editId) {
+    $stmt = $db->prepare("
+        UPDATE articulos SET
+            titulo=?, slug=?, extracto=?, contenido=?,
+            imagen_destacada=?, categoria_id=?, juego_id=?,
+            calificacion=?, destacado=?, publicado=?,
+            fecha_publicacion=IF(?=1 AND fecha_publicacion IS NULL,NOW(),fecha_publicacion)
+        WHERE id=?
+    ");
+    $stmt->execute([
+        $titulo, $slug, $extracto, $contenido,
+        $imagen, $categoriaId, $juegoIdVal,
+        $calificVal, $destacado, $publicado,
+        $publicado, $editId
+    ]);
+    $artId = $editId;
+} else {
+    $stmt = $db->prepare("
+        INSERT INTO articulos
+            (titulo,slug,extracto,contenido,imagen_destacada,
+             autor_id,categoria_id,juego_id,calificacion,
+             destacado,publicado,fecha_publicacion)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,IF(?=1,NOW(),NULL))
+    ");
+    $stmt->execute([
+        $titulo, $slug, $extracto, $contenido, $imagen,
+        $user['id'], $categoriaId, $juegoIdVal,
+        $calificVal, $destacado, $publicado, $publicado
+    ]);
+    $artId = $db->lastInsertId();
+}
 
         $del = $db->prepare("DELETE FROM articulo_tags WHERE articulo_id=?");
         $del->execute([$artId]);
