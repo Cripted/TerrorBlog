@@ -240,8 +240,6 @@
         setBtnLoading('td-btn-registro', true, 'Crear cuenta');
         try {
             const fd = new FormData();
-            // Usamos el usuario como nombre_completo también (sin campo separado)
-            fd.append('nombre',    usuario);
             fd.append('usuario',   usuario);
             fd.append('email',     email);
             fd.append('password',  password);

@@ -12,14 +12,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$nombre   = trim($_POST['nombre']   ?? '');
 $usuario  = trim($_POST['usuario']  ?? '');
 $email    = trim($_POST['email']    ?? '');
 $password = $_POST['password']      ?? '';
 $confirmar= $_POST['confirmar']     ?? '';
 
 // Validaciones
-if (!$nombre || !$usuario || !$email || !$password) {
+if (!$usuario || !$email || !$password) {
     echo json_encode(['success' => false, 'message' => 'Todos los campos son obligatorios.']);
     exit;
 }
@@ -52,10 +51,10 @@ if ($check->num_rows > 0) {
 }
 $check->close();
 
-// Insertar
+// Insertar — nombre_completo = username
 $hash = password_hash($password, PASSWORD_DEFAULT);
 $stmt = $conn->prepare("INSERT INTO usuarios (username, email, password, nombre_completo, rol) VALUES (?, ?, ?, ?, 'autor')");
-$stmt->bind_param("ssss", $usuario, $email, $hash, $nombre);
+$stmt->bind_param("ssss", $usuario, $email, $hash, $usuario);
 
 if ($stmt->execute()) {
     $newId = $conn->insert_id;
@@ -66,13 +65,13 @@ if ($stmt->execute()) {
     $_SESSION['logged_in']       = true;
     $_SESSION['user_id']         = $newId;
     $_SESSION['username']        = $usuario;
-    $_SESSION['nombre_completo'] = $nombre;
+    $_SESSION['nombre_completo'] = $usuario;
     $_SESSION['rol']             = 'autor';
 
     echo json_encode([
         'success' => true,
-        'message' => "¡Bienvenido, $nombre! Tu cuenta ha sido creada.",
-        'nombre'  => $nombre,
+        'message' => "¡Bienvenido, $usuario! Tu cuenta ha sido creada.",
+        'nombre'  => $usuario,
     ]);
 } else {
     $stmt->close();

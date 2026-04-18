@@ -6,12 +6,14 @@ $db   = getDB();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['nuevo_usuario'])) {
-        $rol = in_array($_POST['rol'] ?? '', ['autor','editor','admin']) ? $_POST['rol'] : 'autor';
-        $r   = $auth->register(
-            sanitize($_POST['username']        ?? ''),
-            sanitize($_POST['email']           ?? ''),
-            $_POST['password']                 ?? '',
-            sanitize($_POST['nombre_completo'] ?? ''),
+        $rol      = in_array($_POST['rol'] ?? '', ['autor','editor','admin']) ? $_POST['rol'] : 'autor';
+        $username = sanitize($_POST['username'] ?? '');
+        // nombre_completo = username si no se provee
+        $r = $auth->register(
+            $username,
+            sanitize($_POST['email']    ?? ''),
+            $_POST['password']          ?? '',
+            $username,   // nombre_completo igual al username
             $rol
         );
         setFlashMessage($r['success'] ? 'success' : 'error', $r['message']);
@@ -64,10 +66,6 @@ $flash = getFlashMessage();
                         <input type="text" name="username" required placeholder="usuario123">
                     </div>
                     <div class="form-group">
-                        <label>Nombre completo *</label>
-                        <input type="text" name="nombre_completo" required placeholder="Juan García">
-                    </div>
-                    <div class="form-group">
                         <label>Email *</label>
                         <input type="email" name="email" required placeholder="correo@ejemplo.com">
                     </div>
@@ -93,7 +91,6 @@ $flash = getFlashMessage();
             <thead>
                 <tr>
                     <th>Usuario</th>
-                    <th>Nombre</th>
                     <th>Email</th>
                     <th>Rol</th>
                     <th>Estado</th>
@@ -105,7 +102,6 @@ $flash = getFlashMessage();
             <?php foreach ($users as $u): ?>
             <tr>
                 <td><strong><?= htmlspecialchars($u['username']) ?></strong></td>
-                <td><?= htmlspecialchars($u['nombre_completo']) ?></td>
                 <td><?= htmlspecialchars($u['email']) ?></td>
                 <td>
                     <?php if ($u['id'] != $user['id']): ?>
