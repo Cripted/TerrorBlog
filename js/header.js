@@ -66,7 +66,7 @@
         ].join(';');
 
         modal.innerHTML = `
-        <div style="background:linear-gradient(160deg,#0d0d0d,#1a0033);border:2px solid var(--blood-red);box-shadow:0 0 50px rgba(139,0,0,.6);width:100%;max-width:440px;padding:2.5rem;position:relative;margin:1rem;font-family:'Rubik',sans-serif;">
+        <div style="background:linear-gradient(160deg,#0d0d0d,#1a0033);border:2px solid var(--blood-red);box-shadow:0 0 50px rgba(139,0,0,.6);width:100%;max-width:420px;padding:2.5rem;position:relative;margin:1rem;font-family:'Rubik',sans-serif;">
 
             <button onclick="TD_cerrarModal()" aria-label="Cerrar"
                     style="position:absolute;top:1rem;right:1rem;background:transparent;border:none;color:#888;font-size:1.6rem;cursor:pointer;line-height:1;">&times;</button>
@@ -100,7 +100,6 @@
             <!-- REGISTRO -->
             <div id="td-panel-registro" style="display:none;">
                 <p style="color:#888;font-size:.88rem;margin-bottom:1.1rem;">Únete a la comunidad del terror</p>
-                ${campo('td-reg-nombre','Nombre completo','text','name')}
                 ${campo('td-reg-usuario','Usuario <small style="color:#555">(letras, números y _)</small>','text','username')}
                 ${campo('td-reg-email','Email','email','email')}
                 ${campo('td-reg-pass','Contraseña <small style="color:#555">(mín. 6 caracteres)</small>','password','new-password')}
@@ -189,7 +188,7 @@
         trBtn.style.color      = isLogin ? '#666' : '#f5f5f5';
 
         setTimeout(() => {
-            const f = document.getElementById(isLogin ? 'td-login-usuario' : 'td-reg-nombre');
+            const f = document.getElementById(isLogin ? 'td-login-usuario' : 'td-reg-usuario');
             if (f) f.focus();
         }, 60);
     };
@@ -226,13 +225,12 @@
     };
 
     window.TD_doRegistro = async function () {
-        const nombre    = document.getElementById('td-reg-nombre')?.value.trim();
         const usuario   = document.getElementById('td-reg-usuario')?.value.trim();
         const email     = document.getElementById('td-reg-email')?.value.trim();
         const password  = document.getElementById('td-reg-pass')?.value;
         const confirmar = document.getElementById('td-reg-confirmar')?.value;
 
-        if (!nombre || !usuario || !email || !password || !confirmar) {
+        if (!usuario || !email || !password || !confirmar) {
             setAlerta('Por favor completa todos los campos.', 'error'); return;
         }
         if (password !== confirmar) {
@@ -242,7 +240,8 @@
         setBtnLoading('td-btn-registro', true, 'Crear cuenta');
         try {
             const fd = new FormData();
-            fd.append('nombre',    nombre);
+            // Usamos el usuario como nombre_completo también (sin campo separado)
+            fd.append('nombre',    usuario);
             fd.append('usuario',   usuario);
             fd.append('email',     email);
             fd.append('password',  password);

@@ -10,7 +10,7 @@ class Auth {
     private $db;
 
     public function __construct() {
-        $this->db = getDB();   // ← CORRECCIÓN PRINCIPAL: antes faltaba esta línea
+        $this->db = getDB();
         $this->initSession();
     }
 
@@ -77,10 +77,10 @@ class Auth {
             // Crear sesión
             $_SESSION['user_id']         = $user['id'];
             $_SESSION['username']        = $user['username'];
-            $_SESSION['email']           = $user['email'];
-            $_SESSION['nombre_completo'] = $user['nombre_completo'];
-            $_SESSION['rol']             = $user['rol'];
-            $_SESSION['avatar']          = $user['avatar'];
+            $_SESSION['email']           = $user['email']  ?? '';
+            $_SESSION['nombre_completo'] = $user['nombre_completo'] ?? $user['username'];
+            $_SESSION['rol']             = $user['rol']    ?? 'autor';
+            $_SESSION['avatar']          = $user['avatar'] ?? null;
             $_SESSION['logged_in']       = true;
 
             // Último acceso
@@ -117,12 +117,12 @@ class Auth {
     public function getCurrentUser() {
         if (!$this->isLoggedIn()) return null;
         return [
-            'id'             => $_SESSION['user_id'],
-            'username'       => $_SESSION['username'],
-            'email'          => $_SESSION['email'],
-            'nombre_completo'=> $_SESSION['nombre_completo'],
-            'rol'            => $_SESSION['rol'],
-            'avatar'         => $_SESSION['avatar'],
+            'id'             => $_SESSION['user_id']         ?? 0,
+            'username'       => $_SESSION['username']        ?? '',
+            'email'          => $_SESSION['email']           ?? '',
+            'nombre_completo'=> $_SESSION['nombre_completo'] ?? '',
+            'rol'            => $_SESSION['rol']             ?? 'autor',
+            'avatar'         => $_SESSION['avatar']          ?? null,
         ];
     }
 
