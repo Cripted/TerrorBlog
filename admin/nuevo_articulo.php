@@ -49,6 +49,8 @@
         #nart-steam-preview p { color:#c6d4df; font-family:'Rubik',sans-serif; font-size:.82rem; flex:1; }
         #nart-steam-preview button { background:transparent; border:1px solid #c44; color:#c44; padding:.3rem .6rem; font-size:.75rem; cursor:pointer; }
         #nart-steam-preview button:hover { background:rgba(200,50,50,.2); }
+
+        .steam-note { font-family:'Rubik',sans-serif; font-size:.72rem; color:#4a8; margin-top:.4rem; }
     </style>
 </head>
 <body>
@@ -59,6 +61,54 @@ require_once '../config/auth.php';
 $auth->requireRole('editor');
 $user = $auth->getCurrentUser();
 $db   = getDB();
+
+// ── Helper: descarga imagen de Steam y la guarda en uploads/ ─────────────────
+function downloadSteamImage(string $url, string $prefix = 'art'): array
+{
+    $allowed = [
+        'cdn.akamai.steamstatic.com',
+        'cdn.cloudflare.steamstatic.com',
+        'steamcdn-a.akamaihd.net',
+        'store.steampowered.com',
+    ];
+    $host = parse_url($url, PHP_URL_HOST);
+    $ok   = false;
+    foreach ($allowed as $a) {
+        if ($host === $a || str_ends_with($host, '.' . $a)) { $ok = true; break; }
+    }
+    if (!$ok) return ['success' => false, 'message' => 'Dominio no permitido: ' . $host];
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; TerrorDigital/1.0)',
+    ]);
+    $data     = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if (!$data || $httpCode !== 200) {
+        return ['success' => false, 'message' => "No se pudo descargar la imagen (HTTP $httpCode)"];
+    }
+
+    $finfo  = new finfo(FILEINFO_MIME_TYPE);
+    $mime   = $finfo->buffer($data);
+    $extMap = ['image/jpeg'=>'jpg','image/png'=>'png','image/gif'=>'gif','image/webp'=>'webp'];
+    if (!isset($extMap[$mime])) return ['success' => false, 'message' => "Tipo no permitido: $mime"];
+
+    if (strlen($data) > MAX_FILE_SIZE) return ['success' => false, 'message' => 'Imagen demasiado grande (máx 5 MB)'];
+
+    if (!file_exists(UPLOAD_DIR)) mkdir(UPLOAD_DIR, 0777, true);
+    $filename = $prefix . '_steam_' . uniqid() . '_' . time() . '.' . $extMap[$mime];
+    if (file_put_contents(UPLOAD_DIR . $filename, $data) === false) {
+        return ['success' => false, 'message' => 'No se pudo guardar la imagen'];
+    }
+    return ['success' => true, 'filename' => $filename, 'url' => UPLOAD_URL . $filename];
+}
 
 $errorMsg   = '';
 $successMsg = '';
@@ -83,11 +133,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $check->execute([$slug]);
         if ($check->fetch()) $slug .= '-' . time();
 
-        // Prioridad: URL Steam > archivo local
+        // ── Prioridad: URL Steam → archivo local ──────────────────────────────
         $imagen_destacada = null;
 
         if (!empty($_POST['steam_image_url'])) {
-        $imagen_destacada = trim($_POST['steam_image_url']);
+            // Descargar imagen de Steam y guardarla localmente
+            $download = downloadSteamImage(trim($_POST['steam_image_url']), 'art');
+            if ($download['success']) {
+                $imagen_destacada = $download['filename'];
+            } else {
+                $errorMsg = 'Error al descargar imagen de Steam: ' . $download['message'];
+            }
         } elseif (!empty($_FILES['imagen']['name'])) {
             $up = uploadImage($_FILES['imagen'], 'art');
             if ($up['success']) {
@@ -173,7 +229,6 @@ $juegos     = $db->query("SELECT id, nombre FROM juegos WHERE activo = TRUE ORDE
         </h2>
 
         <form method="POST" enctype="multipart/form-data">
-            <!-- Campo oculto para URL de Steam -->
             <input type="hidden" name="steam_image_url" id="nart-steam-url">
 
             <div class="admin-panel">
@@ -243,6 +298,9 @@ $juegos     = $db->query("SELECT id, nombre FROM juegos WHERE activo = TRUE ORDE
                             <p id="nart-preview-nombre"></p>
                             <button type="button" onclick="limpiarNartSeleccion()">✕ Quitar</button>
                         </div>
+                        <p class="steam-note" id="nart-steam-note" style="display:none;">
+                            ✅ La imagen se descargará y guardará en el servidor al crear el artículo.
+                        </p>
                     </div>
                 </div>
 
@@ -388,8 +446,8 @@ async function buscarNartSteam() {
         status.textContent = `${items.length} resultado(s). Haz clic para seleccionar.`;
 
         results.innerHTML = items.slice(0, 15).map(item => {
-              const img = `https://cdn.akamai.steamstatic.com/steam/apps/${item.id}/header.jpg`;
-              const imgPreview = `../php/image_proxy.php?url=${encodeURIComponent(img)}`;
+            const img        = `https://cdn.akamai.steamstatic.com/steam/apps/${item.id}/header.jpg`;
+            const imgPreview = `../php/image_proxy.php?url=${encodeURIComponent(img)}`;
             return `<div class="steam-result-item"
                         onclick="seleccionarNartSteam('${escJS(img)}','${escJS(item.name)}')"
                         data-url="${escHTML(img)}">
@@ -416,11 +474,11 @@ function seleccionarNartSteam(imgUrl, nombre) {
         el.classList.toggle('selected', el.dataset.url === imgUrl);
     });
     document.getElementById('nart-steam-url').value = imgUrl;
-    const preview = document.getElementById('nart-steam-preview');
-    // Mostrar preview usando el proxy, pero guardar la URL original
+    // Preview usa el proxy solo para visualizar; al guardar el PHP descarga la imagen real
     document.getElementById('nart-preview-img').src = `../php/image_proxy.php?url=${encodeURIComponent(imgUrl)}`;
     document.getElementById('nart-preview-nombre').textContent = nombre;
-    preview.style.display = 'flex';
+    document.getElementById('nart-steam-preview').style.display = 'flex';
+    document.getElementById('nart-steam-note').style.display = 'block';
     document.getElementById('imagen').value = '';
     document.getElementById('img-preview').style.display = 'none';
 }
@@ -429,6 +487,7 @@ function limpiarNartSeleccion(resetField = true) {
     if (resetField) document.getElementById('nart-steam-url').value = '';
     document.querySelectorAll('#nart-steam-results .steam-result-item').forEach(el => el.classList.remove('selected'));
     document.getElementById('nart-steam-preview').style.display = 'none';
+    document.getElementById('nart-steam-note').style.display = 'none';
 }
 
 // ── Editor HTML ───────────────────────────────────────────────────────────────

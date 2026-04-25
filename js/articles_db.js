@@ -11,6 +11,22 @@ const API_BASE    = IS_IN_PAGES ? '../php/' : 'php/';
 const UPLOAD_BASE = IS_IN_PAGES ? '../uploads/' : 'uploads/';
 const PAGES_BASE  = IS_IN_PAGES ? ''          : 'pages/';
 
+// ── Dominios de Steam que requieren pasar por el proxy ────────────────────────
+const STEAM_DOMAINS = [
+    'cdn.akamai.steamstatic.com',
+    'cdn.cloudflare.steamstatic.com',
+    'steamcdn-a.akamaihd.net',
+    'store.steampowered.com',
+];
+
+function isSteamUrl(url) {
+    if (!url) return false;
+    try {
+        const host = new URL(url).hostname;
+        return STEAM_DOMAINS.some(d => host === d || host.endsWith('.' + d));
+    } catch { return false; }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getArticleId() {
@@ -27,15 +43,23 @@ function formatearFecha(fecha) {
 
 /**
  * Resuelve la URL correcta de una imagen.
- * Si es una URL externa (Steam, http/https) la devuelve tal cual.
- * Si es un nombre de archivo local, le añade el prefijo de uploads.
+ * - URLs de Steam  → pasan por el proxy PHP para evitar bloqueo de hotlinking.
+ * - Otras externas → se usan directamente.
+ * - Archivos locales → se les añade el prefijo uploads/.
  */
 function resolveImageUrl(imagen) {
     if (!imagen) return null;
-    if (imagen.startsWith('http://') || imagen.startsWith('https://')) {
-        return imagen; // URL externa: Steam u otro CDN
+
+    if (isSteamUrl(imagen)) {
+        // Pasar por el proxy para evitar que Steam bloquee la petición
+        return `${API_BASE}image_proxy.php?url=${encodeURIComponent(imagen)}`;
     }
-    return UPLOAD_BASE + imagen; // archivo local
+
+    if (imagen.startsWith('http://') || imagen.startsWith('https://')) {
+        return imagen; // Otra URL externa: usar directamente
+    }
+
+    return UPLOAD_BASE + imagen; // Archivo local
 }
 
 /**
@@ -107,7 +131,7 @@ async function loadArticle() {
         if (elDate)     elDate.textContent     = formatearFecha(art.fecha_publicacion);
         if (elViews)    elViews.textContent    = (art.vistas || 0).toLocaleString();
 
-        // Imagen destacada — soporta URLs externas y locales
+        // Imagen destacada — soporta Steam (proxy), otras URLs externas y locales
         if (elImage) {
             if (art.imagen_destacada) {
                 const imgSrc = resolveImageUrl(art.imagen_destacada);

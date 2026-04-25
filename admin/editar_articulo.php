@@ -5,6 +5,54 @@ $auth->requireLogin();
 $user = $auth->getCurrentUser();
 $db   = getDB();
 
+// ── Helper: descarga imagen de Steam y la guarda en uploads/ ─────────────────
+function downloadSteamImage(string $url, string $prefix = 'art'): array
+{
+    $allowed = [
+        'cdn.akamai.steamstatic.com',
+        'cdn.cloudflare.steamstatic.com',
+        'steamcdn-a.akamaihd.net',
+        'store.steampowered.com',
+    ];
+    $host = parse_url($url, PHP_URL_HOST);
+    $ok   = false;
+    foreach ($allowed as $a) {
+        if ($host === $a || str_ends_with($host, '.' . $a)) { $ok = true; break; }
+    }
+    if (!$ok) return ['success' => false, 'message' => 'Dominio no permitido: ' . $host];
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; TerrorDigital/1.0)',
+    ]);
+    $data     = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if (!$data || $httpCode !== 200) {
+        return ['success' => false, 'message' => "No se pudo descargar la imagen (HTTP $httpCode)"];
+    }
+
+    $finfo  = new finfo(FILEINFO_MIME_TYPE);
+    $mime   = $finfo->buffer($data);
+    $extMap = ['image/jpeg'=>'jpg','image/png'=>'png','image/gif'=>'gif','image/webp'=>'webp'];
+    if (!isset($extMap[$mime])) return ['success' => false, 'message' => "Tipo no permitido: $mime"];
+
+    if (strlen($data) > MAX_FILE_SIZE) return ['success' => false, 'message' => 'Imagen demasiado grande (máx 5 MB)'];
+
+    if (!file_exists(UPLOAD_DIR)) mkdir(UPLOAD_DIR, 0777, true);
+    $filename = $prefix . '_steam_' . uniqid() . '_' . time() . '.' . $extMap[$mime];
+    if (file_put_contents(UPLOAD_DIR . $filename, $data) === false) {
+        return ['success' => false, 'message' => 'No se pudo guardar la imagen'];
+    }
+    return ['success' => true, 'filename' => $filename, 'url' => UPLOAD_URL . $filename];
+}
+
 $editId   = isset($_GET['id']) ? (int)$_GET['id'] : null;
 $articulo = null;
 $artTags  = [];
@@ -45,58 +93,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$contenido)   $errors[] = 'El contenido es requerido';
     if (!$categoriaId) $errors[] = 'La categoría es requerida';
 
-    // Prioridad: URL Steam > archivo local > imagen previa
+    // ── Prioridad de imagen: Steam URL → archivo local → imagen previa ────────
     $imagen = $articulo['imagen_destacada'] ?? null;
 
     if (!empty($_POST['steam_image_url'])) {
-    $imagen = trim($_POST['steam_image_url']);
+        // Descargar imagen de Steam y guardarla localmente
+        $steamUrl = trim($_POST['steam_image_url']);
+        $download = downloadSteamImage($steamUrl, 'art');
+        if ($download['success']) {
+            // Si había una imagen local previa, borrarla para no acumular archivos
+            if ($imagen && !str_starts_with($imagen, 'http')) {
+                $oldPath = UPLOAD_DIR . $imagen;
+                if (file_exists($oldPath)) @unlink($oldPath);
+            }
+            $imagen = $download['filename'];
+        } else {
+            $errors[] = 'Error al descargar imagen de Steam: ' . $download['message'];
+        }
     } elseif (!empty($_FILES['imagen']['name'])) {
         $upload = uploadImage($_FILES['imagen'], 'art');
-        if ($upload['success']) $imagen = $upload['filename'];
-        else $errors[] = $upload['message'];
+        if ($upload['success']) {
+            // Borrar imagen local previa si existe
+            if ($imagen && !str_starts_with($imagen, 'http')) {
+                $oldPath = UPLOAD_DIR . $imagen;
+                if (file_exists($oldPath)) @unlink($oldPath);
+            }
+            $imagen = $upload['filename'];
+        } else {
+            $errors[] = $upload['message'];
+        }
     }
 
     if (empty($errors)) {
         $juegoIdVal = $juegoId ?: null;
         $calificVal = $calificacion ? (float)$calificacion : null;
 
-if ($editId) {
-    $stmt = $db->prepare("
-        UPDATE articulos SET
-            titulo=?, slug=?, extracto=?, contenido=?,
-            imagen_destacada=?, categoria_id=?, juego_id=?,
-            calificacion=?, destacado=?, publicado=?,
-            fecha_publicacion=IF(?=1 AND fecha_publicacion IS NULL,NOW(),fecha_publicacion)
-        WHERE id=?
-    ");
-    $stmt->execute([
-        $titulo, $slug, $extracto, $contenido,
-        $imagen, $categoriaId, $juegoIdVal,
-        $calificVal, $destacado, $publicado,
-        $publicado, $editId
-    ]);
-    $artId = $editId;
-} else {
-    $stmt = $db->prepare("
-        INSERT INTO articulos
-            (titulo,slug,extracto,contenido,imagen_destacada,
-             autor_id,categoria_id,juego_id,calificacion,
-             destacado,publicado,fecha_publicacion)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,IF(?=1,NOW(),NULL))
-    ");
-    $stmt->execute([
-        $titulo, $slug, $extracto, $contenido, $imagen,
-        $user['id'], $categoriaId, $juegoIdVal,
-        $calificVal, $destacado, $publicado, $publicado
-    ]);
-    $artId = $db->lastInsertId();
-}
+        if ($editId) {
+            $stmt = $db->prepare("
+                UPDATE articulos SET
+                    titulo=?, slug=?, extracto=?, contenido=?,
+                    imagen_destacada=?, categoria_id=?, juego_id=?,
+                    calificacion=?, destacado=?, publicado=?,
+                    fecha_publicacion=IF(?=1 AND fecha_publicacion IS NULL,NOW(),fecha_publicacion)
+                WHERE id=?
+            ");
+            $stmt->execute([
+                $titulo, $slug, $extracto, $contenido,
+                $imagen, $categoriaId, $juegoIdVal,
+                $calificVal, $destacado, $publicado,
+                $publicado, $editId
+            ]);
+            $artId = $editId;
+        } else {
+            $stmt = $db->prepare("
+                INSERT INTO articulos
+                    (titulo,slug,extracto,contenido,imagen_destacada,
+                     autor_id,categoria_id,juego_id,calificacion,
+                     destacado,publicado,fecha_publicacion)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,IF(?=1,NOW(),NULL))
+            ");
+            $stmt->execute([
+                $titulo, $slug, $extracto, $contenido, $imagen,
+                $user['id'], $categoriaId, $juegoIdVal,
+                $calificVal, $destacado, $publicado, $publicado
+            ]);
+            $artId = $db->lastInsertId();
+        }
 
         $del = $db->prepare("DELETE FROM articulo_tags WHERE articulo_id=?");
         $del->execute([$artId]);
         foreach ($tags as $tagId) {
             $ins = $db->prepare("INSERT IGNORE INTO articulo_tags (articulo_id,tag_id) VALUES(?,?)");
-            $ins->execute([$artId,$tagId]);
+            $ins->execute([$artId, $tagId]);
         }
 
         setFlashMessage('success', $editId ? 'Artículo actualizado' : 'Artículo creado correctamente');
@@ -168,6 +236,8 @@ $imagenSrc = $imagenActual
         #art-steam-preview p { color:#c6d4df; font-family:'Rubik',sans-serif; font-size:.82rem; flex:1; }
         #art-steam-preview button { background:transparent; border:1px solid #c44; color:#c44; padding:.3rem .6rem; font-size:.75rem; cursor:pointer; }
         #art-steam-preview button:hover { background:rgba(200,50,50,.2); }
+
+        .steam-note { font-family:'Rubik',sans-serif; font-size:.72rem; color:#4a8; margin-top:.4rem; }
 
         .current-img-wrap { margin-bottom:.8rem; padding:.6rem; background:#0a0a0a; border:1px solid #222; transition:opacity .2s; }
         .current-img-wrap img { width:100%; max-height:140px; object-fit:cover; display:block; border:1px solid #333; }
@@ -303,6 +373,9 @@ $imagenSrc = $imagenActual
                                     <p id="art-preview-nombre"></p>
                                     <button type="button" onclick="limpiarArtSeleccion()">✕ Quitar</button>
                                 </div>
+                                <p class="steam-note" id="art-steam-note" style="display:none;">
+                                    ✅ La imagen se descargará y guardará en el servidor al guardar el artículo.
+                                </p>
                             </div>
                         </div>
 
@@ -386,8 +459,8 @@ async function buscarArtSteam() {
         status.textContent = `${items.length} resultado(s). Haz clic para seleccionar.`;
 
         results.innerHTML = items.slice(0, 15).map(item => {
-              const img = `https://cdn.akamai.steamstatic.com/steam/apps/${item.id}/header.jpg`;
-              const imgPreview = `../php/image_proxy.php?url=${encodeURIComponent(img)}`;
+            const img        = `https://cdn.akamai.steamstatic.com/steam/apps/${item.id}/header.jpg`;
+            const imgPreview = `../php/image_proxy.php?url=${encodeURIComponent(img)}`;
             return `<div class="steam-result-item"
                         onclick="seleccionarArtSteam('${escJS(img)}','${escJS(item.name)}')"
                         data-url="${escHTML(img)}">
@@ -414,11 +487,13 @@ function seleccionarArtSteam(imgUrl, nombre) {
         el.classList.toggle('selected', el.dataset.url === imgUrl);
     });
     document.getElementById('art-steam-url').value = imgUrl;
-    const preview = document.getElementById('art-steam-preview');
-    // Mostrar preview usando el proxy, pero guardar la URL original
+
+    // Preview usando el proxy solo para visualizar; el PHP descargará la imagen real al guardar
     document.getElementById('art-preview-img').src = `../php/image_proxy.php?url=${encodeURIComponent(imgUrl)}`;
     document.getElementById('art-preview-nombre').textContent = nombre;
-    preview.style.display = 'flex';
+    document.getElementById('art-steam-preview').style.display = 'flex';
+    document.getElementById('art-steam-note').style.display = 'block';
+
     const cw = document.getElementById('current-img-wrap');
     if (cw) cw.style.opacity = '.4';
     document.getElementById('art-local-input').value = '';
@@ -429,6 +504,7 @@ function limpiarArtSeleccion(resetField = true) {
     if (resetField) document.getElementById('art-steam-url').value = '';
     document.querySelectorAll('#art-steam-results .steam-result-item').forEach(el => el.classList.remove('selected'));
     document.getElementById('art-steam-preview').style.display = 'none';
+    document.getElementById('art-steam-note').style.display = 'none';
     const cw = document.getElementById('current-img-wrap');
     if (cw) cw.style.opacity = '1';
 }
