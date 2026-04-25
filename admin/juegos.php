@@ -459,9 +459,10 @@ async function buscarSteam() {
 
         results.innerHTML = items.slice(0, 15).map(item => {
             const imgUrl = `https://cdn.akamai.steamstatic.com/steam/apps/${item.id}/header.jpg`;
+            const imgPreview = `../php/image_proxy.php?url=${encodeURIComponent(imgUrl)}`;
             return `
             <div class="steam-result-item" onclick="seleccionarJuegoSteam(${item.id}, '${escJS(item.name)}', '${escJS(imgUrl)}')" data-appid="${item.id}">
-                <img src="${imgUrl}" alt="${escHTML(item.name)}"
+                <img src="${imgPreview}" alt="${escHTML(item.name)}"
                      onerror="this.src='https://placehold.co/80x37/1b2838/66c0f4?text=?'">
                 <div class="steam-result-info">
                     <strong>${escHTML(item.name)}</strong>

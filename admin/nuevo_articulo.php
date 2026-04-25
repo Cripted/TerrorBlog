@@ -388,11 +388,12 @@ async function buscarNartSteam() {
         status.textContent = `${items.length} resultado(s). Haz clic para seleccionar.`;
 
         results.innerHTML = items.slice(0, 15).map(item => {
-            const img = `https://cdn.akamai.steamstatic.com/steam/apps/${item.id}/header.jpg`;
+              const img = `https://cdn.akamai.steamstatic.com/steam/apps/${item.id}/header.jpg`;
+              const imgPreview = `../php/image_proxy.php?url=${encodeURIComponent(img)}`;
             return `<div class="steam-result-item"
-                         onclick="seleccionarNartSteam('${escJS(img)}','${escJS(item.name)}')"
-                         data-url="${escHTML(img)}">
-                <img src="${escHTML(img)}" alt="${escHTML(item.name)}"
+                        onclick="seleccionarNartSteam('${escJS(img)}','${escJS(item.name)}')"
+                        data-url="${escHTML(img)}">
+                 <img src="${escHTML(imgPreview)}" alt="${escHTML(item.name)}"
                      onerror="this.src='https://placehold.co/72x34/1b2838/66c0f4?text=?'">
                 <div class="steam-result-info">
                     <strong>${escHTML(item.name)}</strong>
@@ -416,7 +417,8 @@ function seleccionarNartSteam(imgUrl, nombre) {
     });
     document.getElementById('nart-steam-url').value = imgUrl;
     const preview = document.getElementById('nart-steam-preview');
-    document.getElementById('nart-preview-img').src = imgUrl;
+    // Mostrar preview usando el proxy, pero guardar la URL original
+    document.getElementById('nart-preview-img').src = `../php/image_proxy.php?url=${encodeURIComponent(imgUrl)}`;
     document.getElementById('nart-preview-nombre').textContent = nombre;
     preview.style.display = 'flex';
     document.getElementById('imagen').value = '';
